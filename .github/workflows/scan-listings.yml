@@ -1,8 +1,8 @@
-name: Scan Token Listings
+name: Scan New Token Listings
 
 on:
   schedule:
-    # Runs every 5 minutes
+    # Run every 5 minutes (adjust as needed)
     - cron: '*/5 * * * *'
   
   # Allow manual trigger
@@ -21,6 +21,12 @@ jobs:
         with:
           python-version: '3.9'
       
+      - name: Cache Python dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements.txt') }}
+      
       - name: Install dependencies
         run: |
           cd backend
@@ -29,8 +35,9 @@ jobs:
       - name: Run exchange scanner
         env:
           MONGODB_URI: ${{ secrets.MONGODB_URI }}
-          BSCSCAN_API_KEY: ${{ secrets.BSCSCAN_API_KEY }}
           ETHERSCAN_API_KEY: ${{ secrets.ETHERSCAN_API_KEY }}
+          COINGECKO_API_KEY: ${{ secrets.COINGECKO_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: |
           cd backend
           python aggregator.py scan
@@ -38,4 +45,9 @@ jobs:
       - name: Log completion
         run: |
           echo "✅ Scan completed at $(date)"
-          echo "Next scan in 5 minutes"
+          echo "📊 Next scan in 5 minutes"
+      
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "❌ Scan failed! Check logs above."
