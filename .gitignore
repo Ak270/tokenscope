@@ -1,15 +1,15 @@
+# Environment variables (NEVER commit these!)
+.env
+.env.local
+backend/.env
+frontend/.env.local
+
 # Dependencies
 node_modules/
 frontend/node_modules/
-
-# Environment variables
-.env
-.env.local
-frontend/.env.local
-backend/.env
+backend/venv/
 
 # Python
-backend/venv/
 __pycache__/
 *.pyc
 
@@ -17,8 +17,9 @@ __pycache__/
 frontend/.next/
 frontend/out/
 
+# Build
+.DS_Store
+*.log
+
 # Vercel
 .vercel
-
-# OS
-.DS_Store

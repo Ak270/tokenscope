@@ -599,3 +599,49 @@ if __name__ == "__main__":
             print("Unknown command. Use: scan | enrich <SYMBOL>")
     else:
         print("Usage: python aggregator.py <scan|enrich>")
+
+# Import AI analyzer at top of file
+from ai_analyzer import analyze_token_with_ai, get_market_sentiment
+
+# Update the generate_ai_recommendation function:
+def generate_ai_recommendation_with_groq(self, token: Dict) -> Dict:
+    """
+    Generate AI-powered recommendation using Groq
+    """
+    
+    # Get AI analysis
+    ai_result = analyze_token_with_ai(token)
+    
+    # Get market sentiment
+    sentiment = get_market_sentiment(token['symbol'])
+    
+    # Combine with algorithmic scoring
+    verification = token.get('verification', {})
+    price_data = token.get('price_data', {})
+    
+    # Calculate confidence based on data quality
+    confidence = 50
+    
+    if verification.get('contract_verified'):
+        confidence += 15
+    if verification.get('honeypot_check') == 'SAFE':
+        confidence += 15
+    if price_data.get('volume_24h', 0) > 100000:
+        confidence += 10
+    if sentiment.get('sentiment') == 'BULLISH':
+        confidence += 10
+    
+    current_price = price_data.get('current_price_usd', 0)
+    
+    return {
+        'action': ai_result['recommendation'],
+        'confidence': min(95, max(30, confidence)),
+        'ai_analysis': ai_result['ai_analysis'],
+        'market_sentiment': sentiment,
+        'suggested_entry': round(current_price * 0.98, 6) if current_price else 0,
+        'target_2x': round(current_price * 2.0, 6) if current_price else 0,
+        'target_5x': round(current_price * 5.0, 6) if current_price else 0,
+        'stop_loss': round(current_price * 0.80, 6) if current_price else 0,
+        'position_size_recommendation': '3-5% of portfolio' if ai_result['recommendation'] == 'BUY' else '0%',
+        'model': ai_result['model_used']
+    }
