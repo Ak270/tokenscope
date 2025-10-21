@@ -1,0 +1,40 @@
+name: Monitor Token Listings
+
+on:
+  schedule:
+    # Run every 5 minutes
+    - cron: '*/5 * * * *'
+  
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  scan-exchanges:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      
+      - name: Install dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt
+      
+      - name: Run exchange scanner
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          BSCSCAN_API_KEY: ${{ secrets.BSCSCAN_API_KEY }}
+          ETHERSCAN_API_KEY: ${{ secrets.ETHERSCAN_API_KEY }}
+        run: |
+          cd backend
+          python aggregator.py scan
+      
+      - name: Notify if new listings found
+        if: success()
+        run: |
+          echo "✅ Exchange scan completed successfully"
