@@ -1,0 +1,58 @@
+name: Daily Performance Check
+
+on:
+  schedule:
+    # Run once daily at 9 AM UTC (2:30 PM IST)
+    - cron: '0 9 * * *'
+  
+  workflow_dispatch:
+
+jobs:
+  check-performance:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt
+      
+      - name: Generate performance report
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          cd backend
+          python -c "
+from pymongo import MongoClient
+from datetime import datetime, timedelta
+import os
+
+client = MongoClient(os.getenv('MONGODB_URI'))
+db = client['tokenscope']
+
+# Count listings in last 24h
+yesterday = (datetime.utcnow() - timedelta(days=1)).isoformat() + 'Z'
+recent_listings = db.listings.count_documents({'detected_at': {'\\$gte': yesterday}})
+
+# Count opportunities
+opportunities = db.opportunities.count_documents({})
+
+# Count alerts sent
+alerts_sent = db.opportunities.count_documents({'alert_sent': True})
+
+print(f'📊 Daily Performance Report:')
+print(f'   New listings (24h): {recent_listings}')
+print(f'   Total opportunities: {opportunities}')
+print(f'   Alerts sent: {alerts_sent}')
+          "

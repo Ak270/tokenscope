@@ -150,3 +150,9 @@ def get_explorer_url(chain: str, params: dict) -> str:
     query_string = '&'.join([f"{k}={v}" for k, v in query_params.items()])
     
     return f"{ETHERSCAN_V2_BASE_URL}?{query_string}"
+
+# ============================================
+#  TELEGRAM ALERTS
+# ============================================
+TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
+TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')

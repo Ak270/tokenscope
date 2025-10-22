@@ -1,0 +1,55 @@
+name: Token Scanner (Every 2 Minutes)
+
+on:
+  schedule:
+    # Run every 2 minutes (*/2 * * * *)
+    - cron: '*/2 * * * *'
+  
+  # Allow manual trigger
+  workflow_dispatch:
+
+jobs:
+  scan-and-alert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          cd backend
+          pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Run scanner
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          ETHERSCAN_API_KEY: ${{ secrets.ETHERSCAN_API_KEY }}
+        run: |
+          cd backend
+          echo "🔍 Starting scan..."
+          python scanners/main_scanner.py
+          
+          echo "📊 Analyzing opportunities..."
+          python services/opportunity_detector.py
+          
+          echo "📤 Sending alerts..."
+          python services/alert_manager.py
+          
+          echo "✅ Scan complete!"
+      
+      - name: Log completion
+        if: always()
+        run: |
+          echo "Scan completed at $(date)"
