@@ -55,12 +55,8 @@ class TokenAggregator:
                         return []
                     
                     data = await response.json()
-                    catalogs = data.get('data', {}).get('catalogs', [])
-                    if catalogs:
-                        articles = catalogs[0].get('articles', [])
-                    else:
-                        articles = []
-
+                    articles = data.get('catalogs', [{}])[0].get('articles', [])
+                    
                     tokens = []
                     for article in articles:
                         # Only process recent articles (last 7 days)
@@ -240,111 +236,92 @@ class TokenAggregator:
         print(f"✅ Enrichment complete for {token['symbol']}")
         return enriched
     
-    async def verify_contract(self, contract_address: str, chain: str = 'BSC') -> Dict:
-    
-    # Get chain ID for V2 API
-        chain_id = config.CHAIN_IDS.get(chain.upper())
-        if not chain_id:
-            print(f"⚠️  Unsupported chain: {chain}")
-            return {
-                'contract_verified': False,
-                'honeypot_check': 'UNKNOWN',
-                'risk_score': 80,
-                'risk_level': 'HIGH',
-                'error': f'Unsupported chain: {chain}'
-            }
-    
-        verification_result = {
+    async def verify_contract(self, address: str, chain: str) -> Dict:
+        """
+        Verify smart contract on blockchain explorer
+        
+        Why important? 
+        - Verified = Source code visible = Can check for backdoors
+        - Unverified = Could be honeypot or rug pull
+        
+        Professional audit firms check this first.
+        """
+        if chain == 'BSC':
+            api_url = 'https://api.bscscan.com/api'
+            api_key = config.BSCSCAN_API_KEY
+        elif chain == 'ETH':
+            api_url = 'https://api.etherscan.io/api'
+            api_key = config.ETHERSCAN_API_KEY
+        else:
+            return {'error': f'Unsupported chain: {chain}'}
+        
+        verification = {
             'contract_verified': False,
+            'holder_count': 0,
             'honeypot_check': 'UNKNOWN',
-            'risk_score': 70,
-            'risk_level': 'HIGH'
+            'creator_address': None,
+            'creation_txn': None,
+            'risk_score': 50
         }
-    
-        try:
-            # Etherscan V2 API call
-            url = f"{config.ETHERSCAN_V2_BASE_URL}"
+        
+        async with aiohttp.ClientSession() as session:
+            # Check if contract is verified
             params = {
-                'chainid': chain_id,
                 'module': 'contract',
                 'action': 'getsourcecode',
-                'address': contract_address,
-                'apikey': config.ETHERSCAN_API_KEY
+                'address': address,
+                'apikey': api_key
             }
-        
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=10)) as response:
-                    data = await response.json()
-                
-                    if data.get('status') == '1' and data.get('result'):
-                        result = data['result'][0]
-                        is_verified = result.get('SourceCode') != ''
-                    
-                        verification_result['contract_verified'] = is_verified
-                        verification_result['contract_name'] = result.get('ContractName', 'Unknown')
-                    
-                        if is_verified:
-                            verification_result['risk_score'] = 30  # Lower risk if verified
-                            verification_result['risk_level'] = 'LOW'
-                    
-                        print(f"✅ Contract verification: {is_verified}")
-        
-            # Honeypot check (free API, no key needed)
-            honeypot_url = f"https://api.honeypot.is/v2/IsHoneypot"
+            
+            try:
+                async with session.get(api_url, params=params, timeout=10) as resp:
+                    data = await resp.json()
+                    if data.get('status') == '1' and data['result'][0].get('SourceCode'):
+                        verification['contract_verified'] = True
+                        verification['contract_name'] = data['result'][0].get('ContractName')
+            except Exception as e:
+                print(f"⚠️ Error checking verification: {e}")
+            
+            # Get creator address
             params = {
-                'address': contract_address,
-                'chainID': chain_id
+                'module': 'contract',
+                'action': 'getcontractcreation',
+                'contractaddresses': address,
+                'apikey': api_key
             }
+            
+            try:
+                async with session.get(api_url, params=params, timeout=10) as resp:
+                    data = await resp.json()
+                    if data.get('status') == '1' and data.get('result'):
+                        verification['creator_address'] = data['result'][0].get('contractCreator')
+                        verification['creation_txn'] = data['result'][0].get('txHash')
+            except Exception as e:
+                print(f"⚠️ Error getting creator: {e}")
+            
+            # Honeypot detection (external service)
+            try:
+                honeypot_url = f"https://api.honeypot.is/v2/IsHoneypot"
+                async with session.get(honeypot_url, params={'address': address}, timeout=10) as resp:
+                    honeypot_data = await resp.json()
+                    is_honeypot = honeypot_data.get('honeypotResult', {}).get('isHoneypot', False)
+                    verification['honeypot_check'] = 'RISKY' if is_honeypot else 'SAFE'
+            except:
+                verification['honeypot_check'] = 'UNKNOWN'
         
-            async with aiohttp.ClientSession() as session:
-                try:
-                    async with session.get(honeypot_url, params=params, timeout=aiohttp.ClientTimeout(total=10)) as response:
-                        honeypot_data = await response.json()
-                    
-                        if honeypot_data.get('honeypotResult'):
-                            is_honeypot = honeypot_data['honeypotResult'].get('isHoneypot', False)
-                        
-                            if is_honeypot:
-                                verification_result['honeypot_check'] = 'HONEYPOT'
-                                verification_result['risk_score'] = 100
-                                verification_result['risk_level'] = 'CRITICAL'
-                            else:
-                                verification_result['honeypot_check'] = 'SAFE'
-                                if verification_result['risk_score'] > 50:
-                                    verification_result['risk_score'] = 40
-                        
-                            print(f"✅ Honeypot check: {verification_result['honeypot_check']}")
-                except Exception as e:
-                    print(f"⚠️  Honeypot check failed: {e}")
+        # Calculate risk score (0-100, lower is better)
+        risk = 100
+        if verification['contract_verified']:
+            risk -= 30
+        if verification['honeypot_check'] == 'SAFE':
+            risk -= 30
+        if verification['creator_address']:
+            risk -= 10
         
-            # Calculate final risk score
-            risk_factors = []
-            if not verification_result['contract_verified']:
-                risk_factors.append('Unverified contract')
-            if verification_result['honeypot_check'] == 'HONEYPOT':
-                risk_factors.append('Honeypot detected')
+        verification['risk_score'] = max(0, risk)
+        verification['risk_level'] = 'LOW' if risk < 30 else 'MEDIUM' if risk < 60 else 'HIGH'
         
-            verification_result['risk_factors'] = risk_factors
-        
-            # Adjust risk level
-            if verification_result['risk_score'] < 30:
-                verification_result['risk_level'] = 'LOW'
-            elif verification_result['risk_score'] < 60:
-                verification_result['risk_level'] = 'MEDIUM'
-            else:
-                verification_result['risk_level'] = 'HIGH'
-        
-            return verification_result
-        
-        except Exception as e:
-            print(f"❌ Verification error: {e}")
-            return {
-                'contract_verified': False,
-                'honeypot_check': 'UNKNOWN',
-                'risk_score': 80,
-                'risk_level': 'HIGH',
-                'error': str(e)
-            }
+        return verification
     
     async def get_dex_price_data(self, address: str) -> Optional[Dict]:
         """

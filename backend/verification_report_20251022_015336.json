@@ -1,0 +1,25 @@
+{
+  "timestamp": "2025-10-22T01:53:36.890915",
+  "score": 55.55555555555556,
+  "results": {
+    "exchange_scanning": {
+      "binance": "EMPTY",
+      "pancakeswap": "EMPTY"
+    },
+    "contract_verification": {
+      "USDT (Legit)": "PARTIAL",
+      "PancakeSwap (Legit)": "PARTIAL"
+    },
+    "price_data": {
+      "WETH": "PASS",
+      "USDC": "PASS",
+      "PancakeSwap": "PASS"
+    },
+    "ai_analysis": {
+      "groq": "PASS"
+    },
+    "enrichment": {
+      "full": "PASS"
+    }
+  }
+}
