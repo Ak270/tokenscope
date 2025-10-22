@@ -7,6 +7,8 @@ import asyncio
 from typing import Dict, Optional
 from datetime import datetime
 from pymongo import MongoClient
+import sys, os
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 import config
 
 from services.price_aggregator import PriceAggregator
